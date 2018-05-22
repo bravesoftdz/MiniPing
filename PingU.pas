@@ -3,69 +3,70 @@ unit PingU;
 interface
 
 uses
-  Windows, WinSock, SysUtils;
+  Windows, WinSock2, SysUtils, PingAPIU;
 
 function Ping(const Host: string; out ResultLine: String): Integer;
 
 implementation
 
-{$REGION 'ICMP related functions and types'}
-
-type
-  PIPOptionInformation = ^TIPOptionInformation;
-
-  TIPOptionInformation = record
-    Ttl: Byte; // time to live
-    Tos: Byte; // type of service
-    Flags: Byte; // ip header flags
-    OptionsSize: Byte; // size in bytes of options data
-    OptionsData: ^Byte; // pointer to options data
-  end;
-
-  ICMP_ECHO_REPLY = record
-    Address: in_addr; // replying address
-    Status: ULONG; // reply ip_status
-    RoundTripTime: ULONG; // rtt in milliseconds
-    DataSize: ULONG; // reply data size in bytes
-    Reserved: ULONG; // reserved for system use
-    Data: Pointer; // pointer to the reply data
-    Options: PIPOptionInformation; // reply options
-  end;
-
-  PICMP_ECHO_REPLY = ^ICMP_ECHO_REPLY;
-
-function IcmpCreateFile: THandle; stdcall; external 'icmp.dll';
-function IcmpCloseHandle(icmpHandle: THandle): Boolean; stdcall; external 'icmp.dll';
-function IcmpSendEcho(icmpHandle: THandle; DestinationAddress: in_addr; RequestData: Pointer; RequestSize: Word; RequestOptions: PIPOptionInformation; ReplyBuffer: Pointer; ReplySize: DWORD; Timeout: DWORD): DWORD; stdcall; external 'icmp.dll';
-
-{$ENDREGION}
 {$REGION 'Host + IP to Internal representation'}
 
-function LookupIP(const Hostname: AnsiString; var IPv4: in_addr): Boolean;
+type
+  TIPFormat = (UNSPEC, IPv4, IPv6);
+
+  TLookupResult = record
+    Format: TIPFormat;
+    HumanReadable: string;
+    case Integer of
+      0:
+        (addr: sockaddr);
+      1:
+        (addr4: sockaddr_in);
+      2:
+        (addr6: sockaddr_in6);
+  end;
+
+function LookupIP(const Hostname: string): TLookupResult;
 var
-  HostInfo: PHostEnt;
+  WSData: WSADATA;
+  Hints: ADDRINFOW;
+  addrinfo: PAddrInfoW;
 begin
-  // Default Result Values
-  Result := FALSE;
-  IPv4.S_addr := -1;
+  // Lowest amount of hints possible...
+  ZeroMemory(@Hints, sizeof(Hints));
+  // Since there is no IPv6 support downstream, force IPv4
+  Hints.ai_family := AF_INET;
+  Hints.ai_socktype := SOCK_STREAM;
+  Hints.ai_protocol := IPPROTO_ICMP;
 
-  // Do the Lookup
-  if (Hostname <> '') then
+  if (GetAddrInfoW(PChar(Hostname), nil, @Hints, addrinfo) <> 0) then
   begin
-    HostInfo := GetHostByName(PAnsiChar(Hostname));
-  end
-  else
-  begin
-    // Empty String means localhost
-    HostInfo := GetHostByName(NIL);
+    RaiseLastOSError();
+    Exit;
   end;
 
-  if HostInfo <> nil then
-  begin
-    // Fetch first address from result
-    IPv4.S_addr := PInAddr(HostInfo^.h_addr_list^)^.S_addr;
-    Result := True;
+  // Only take the first one
+  case addrinfo.ai_family of
+    AF_UNSPEC:
+      begin
+        Result.Format := UNSPEC;
+      end;
+    AF_INET:
+      begin
+        Result.Format := IPv4;
+        Result.HumanReadable := GetHumanAddress(sockaddr(addrinfo.ai_addr^), addrinfo.ai_addrlen);
+        Result.addr4 := addrinfo.ai_addr^;
+      end;
+    AF_INET6:
+      begin
+        Result.Format := IPv6;
+        Result.HumanReadable := GetHumanAddress(sockaddr(addrinfo.ai_addr^), addrinfo.ai_addrlen);
+        Result.addr4 := addrinfo.ai_addr^;
+      end;
   end;
+
+  // Clean up
+  FreeAddrInfoW(addrinfo);
 end;
 
 {$ENDREGION}
@@ -164,24 +165,26 @@ end;
 
 function Ping(const Host: string; out ResultLine: String): Integer;
 var
-  ip: in_addr;
   ICMPFile: THandle;
   SendData: array [0 .. 31] of AnsiChar;
   ReplyBuffer: PICMP_ECHO_REPLY;
   ReplySize: DWORD;
   NumResponses: DWORD;
+  Lookup: TLookupResult;
 begin
   SendData := 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
-  if LookupIP(AnsiString(Host), ip) then
+  Lookup := LookupIP(Host);
+
+  if Lookup.Format = IPv4 then
   begin
     ICMPFile := IcmpCreateFile;
     if ICMPFile <> INVALID_HANDLE_VALUE then
       try
-        ReplySize := SizeOf(ICMP_ECHO_REPLY) + SizeOf(SendData);
+        ReplySize := sizeof(ICMP_ECHO_REPLY) + sizeof(SendData);
         GetMem(ReplyBuffer, ReplySize);
         try
-          NumResponses := IcmpSendEcho(ICMPFile, ip, @SendData, SizeOf(SendData), nil, ReplyBuffer, ReplySize, 1000);
+          NumResponses := IcmpSendEcho(ICMPFile, Lookup.addr4.sin_addr, @SendData, sizeof(SendData), nil, ReplyBuffer, ReplySize, 1000);
           if (NumResponses <> 0) then
           begin
             ResultLine := 'Received Response in ' + IntToStr(ReplyBuffer.RoundTripTime) + ' ms';
@@ -216,13 +219,15 @@ end;
 // Initialize WSA for use wich ICMP
 
 var
-  WSAData: TWSAData;
+  WSADATA: TWSAData;
 
 initialization
-  WSAStartup(MAKEWORD(2, 2), WSAData);
+
+WSAStartup(MAKEWORD(2, 2), WSADATA);
 
 finalization
-  WSACleanup();
+
+WSACleanup();
 
 {$ENDREGION}
 

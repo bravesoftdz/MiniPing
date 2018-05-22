@@ -5,7 +5,8 @@ program MiniPing;
 
 uses
   Windows,
-  PingU in 'PingU.pas';
+  PingU in 'PingU.pas',
+  PingAPIU in 'PingAPIU.pas';
 
 var
   argc: Integer;
