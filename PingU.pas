@@ -44,6 +44,9 @@ begin
     Exit;
   end;
 
+  // Default format
+  Result.Format := UNSPEC;
+
   // Only take the first one
   case addrinfo.ai_family of
     AF_UNSPEC:
@@ -143,49 +146,60 @@ end;
 
 {$ENDREGION}
 
-function Ping(const Host: string; out ResultLine: String): Integer;
+/// <summary>
+/// Performs a ICMP Echo Request
+/// </summary>
+function PingV4(const ip: in_addr; const HumanReadable: String; out ResultLine: String): Integer;
 var
   ICMPFile: THandle;
   SendData: array [0 .. 31] of AnsiChar;
   ReplyBuffer: PICMP_ECHO_REPLY;
   ReplySize: DWORD;
   NumResponses: DWORD;
+
+begin
+  SendData := 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  ICMPFile := IcmpCreateFile;
+  if ICMPFile <> INVALID_HANDLE_VALUE then
+    try
+      ReplySize := sizeof(ICMP_ECHO_REPLY) + sizeof(SendData);
+      GetMem(ReplyBuffer, ReplySize);
+      try
+        NumResponses := IcmpSendEcho(ICMPFile, ip, @SendData, sizeof(SendData), nil, ReplyBuffer, ReplySize, 1000);
+        if (NumResponses <> 0) then
+        begin
+          ResultLine := 'Received Response from ' + HumanReadable + ' in ' + IntToStr(ReplyBuffer.RoundTripTime) + ' ms';
+          Result := 0;
+        end
+        else
+        begin
+          ResultLine := 'Error: ' + ErrorToText(GetLastError());
+          Result := 1;
+        end;
+      finally
+        FreeMem(ReplyBuffer);
+      end;
+    finally
+      IcmpCloseHandle(ICMPFile);
+    end
+  else
+  begin
+    RaiseLastOSError();
+  end;
+end;
+
+function Ping(const Host: string; out ResultLine: String): Integer;
+var
   Lookup: TLookupResult;
 begin
   Result := 3;
-  SendData := 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
   Lookup := LookupIP(Host);
 
   if Lookup.Format = IPv4 then
   begin
-    ICMPFile := IcmpCreateFile;
-    if ICMPFile <> INVALID_HANDLE_VALUE then
-      try
-        ReplySize := sizeof(ICMP_ECHO_REPLY) + sizeof(SendData);
-        GetMem(ReplyBuffer, ReplySize);
-        try
-          NumResponses := IcmpSendEcho(ICMPFile, Lookup.addr4.sin_addr, @SendData, sizeof(SendData), nil, ReplyBuffer, ReplySize, 1000);
-          if (NumResponses <> 0) then
-          begin
-            ResultLine := 'Received Response in ' + IntToStr(ReplyBuffer.RoundTripTime) + ' ms';
-            Result := 0;
-          end
-          else
-          begin
-            ResultLine := 'Error: ' + ErrorToText(GetLastError());
-            Result := 1;
-          end;
-        finally
-          FreeMem(ReplyBuffer);
-        end;
-      finally
-        IcmpCloseHandle(ICMPFile);
-      end
-    else
-    begin
-      RaiseLastOSError();
-    end;
+    Result := PingV4(Lookup.addr4.sin_addr, Lookup.HumanReadable, ResultLine);
   end;
 end;
 

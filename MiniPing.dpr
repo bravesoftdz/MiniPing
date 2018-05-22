@@ -47,6 +47,7 @@ begin
     except
       on E: Exception do
       begin
+        Writeln('Exception: ' + E.Message + ' (' + E.ClassName + ')');
         ExitCode := 2;
       end;
     end;
