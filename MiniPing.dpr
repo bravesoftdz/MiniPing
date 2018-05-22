@@ -4,7 +4,7 @@ program MiniPing;
 {$R *.res}
 
 uses
-  Windows,
+  Windows, WinSock2, SysUtils,
   PingU in 'PingU.pas',
   PingAPIU in 'PingAPIU.pas';
 
@@ -12,6 +12,7 @@ var
   argc: Integer;
   Host: String;
   Line: String;
+  WSADATA: TWSAData;
 
 procedure ShowUsage();
 begin
@@ -20,8 +21,7 @@ begin
   Writeln('ExitCodes:');
   Writeln('  0: Host is reachable');
   Writeln('  1: Host is not reachable');
-  Writeln('  2: Could not send ping probe');
-  Writeln('  3: Could not resolve address');
+  Writeln('  2: An exception occured');
   Writeln('');
 end;
 
@@ -38,8 +38,21 @@ begin
     // Get Host
     Host := ParamStr(1);
 
-    ExitCode := PingU.Ping(Host, Line);
-    Write(Line);
+    // Initialize WSA for use wich ICMP
+    WSAStartup(MAKEWORD(2, 2), WSADATA);
+
+    try
+      ExitCode := PingU.Ping(Host, Line);
+      Write(Line);
+    except
+      on E: Exception do
+      begin
+        ExitCode := 2;
+      end;
+    end;
+
+    WSACleanup();
+
   end;
 
 {$IFDEF DEBUG}

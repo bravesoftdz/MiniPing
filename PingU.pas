@@ -28,7 +28,6 @@ type
 
 function LookupIP(const Hostname: string): TLookupResult;
 var
-  WSData: WSADATA;
   Hints: ADDRINFOW;
   addrinfo: PAddrInfoW;
 begin
@@ -142,25 +141,6 @@ begin
   end;
 end;
 
-// Returns the last Win32 error, in string format. Returns an empty string if there is no error.
-// Translated from: https://stackoverflow.com/questions/1387064/how-to-get-the-error-message-from-the-error-code-returned-by-getlasterror
-function GetErrorAsString(const Error: DWORD): string;
-var
-  messageBuffer: PChar;
-begin
-  if (Error = 0) then
-  begin
-    // No error -> empty string
-    Result := '';
-  end
-  else
-  begin
-    messageBuffer := nil;
-    FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER or FORMAT_MESSAGE_FROM_SYSTEM or FORMAT_MESSAGE_IGNORE_INSERTS, nil, Error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), @messageBuffer, 0, nil);
-    Result := messageBuffer;
-  end;
-end;
-
 {$ENDREGION}
 
 function Ping(const Host: string; out ResultLine: String): Integer;
@@ -172,6 +152,7 @@ var
   NumResponses: DWORD;
   Lookup: TLookupResult;
 begin
+  Result := 3;
   SendData := 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
   Lookup := LookupIP(Host);
@@ -203,32 +184,9 @@ begin
       end
     else
     begin
-      ResultLine := 'IcmpCreateFile returned error: ' + GetErrorAsString(GetLastError());
-      Result := 2;
+      RaiseLastOSError();
     end;
-  end
-  else
-  begin
-    // Address seems invalid
-    ResultLine := 'Cannot lookup address: ' + GetErrorAsString(GetLastError());
-    Result := 3;
   end;
 end;
-
-{$REGION 'Initialization'}
-// Initialize WSA for use wich ICMP
-
-var
-  WSADATA: TWSAData;
-
-initialization
-
-WSAStartup(MAKEWORD(2, 2), WSADATA);
-
-finalization
-
-WSACleanup();
-
-{$ENDREGION}
 
 end.
