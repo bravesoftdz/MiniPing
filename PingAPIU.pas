@@ -80,27 +80,24 @@ function IcmpSendEcho(icmpHandle: THandle; DestinationAddress: in_addr; RequestD
 
 {$ENDREGION}
 
-function GetHumanAddress(addr: sockaddr; const addrlen: NativeUInt): String;
+
+function GetHumanAddress(addr: PSockAddr; const addrlen: NativeUInt): String;
 
 implementation
 
-function GetHumanAddress(addr: sockaddr; const addrlen: NativeUInt): String;
+const
+  NI_MAXHOST  = 1025;      // Max size of a fully-qualified domain name.
+  NI_NUMERICHOST  =   $2  ;  // Return numeric form of the host's address.
+
+function GetNameInfoW(pSockaddr: PSockAddr; SockaddrLength: Integer; host: PWideChar; hostlen: u_int; serv: PWideChar; servlen: u_int; flags: Integer): Integer; stdcall; external 'Ws2_32.dll';
+
+
+function GetHumanAddress(addr: PSockAddr; const addrlen: NativeUInt): String;
 var
-  retval: integer;
-  ipbufferlength: DWORD;
-  ipstringbuffer: string;
+  ClientHost: array[0..NI_MAXHOST-1] of Char;
 begin
-  ipbufferlength := 46;
-  SetLength(ipstringbuffer, 46);
-
-  retval := WSAAddressToString(addr, addrlen, nil, PChar(ipstringbuffer), ipbufferlength);
-  if (retval <> 0) then
-  begin
-    raise Exception.Create('WSAAddressToString failed with ' + inttostr(WSAGetLastError()));
-  end;
-
-  result := copy(ipstringbuffer, 1, ipbufferlength - 1);
-
+  GetNameInfoW(addr, addrlen, ClientHost, NI_MAXHOST, nil, 0, NI_NUMERICHOST);
+  Result := ClientHost;
 end;
 
 end.

@@ -17,26 +17,21 @@ type
   TLookupResult = record
     Format: TIPFormat;
     HumanReadable: string;
-    case Integer of
-      0:
-        (addr: sockaddr);
-      1:
-        (addr4: sockaddr_in);
-      2:
-        (addr6: sockaddr_in6);
+    addr4: sockaddr_in;
+    addr6: sockaddr_in6;
   end;
 
-function LookupIP(const Hostname: string): TLookupResult;
+function LookupIP(const Hostname: String): TLookupResult;
 var
   Hints: ADDRINFOW;
   addrinfo: PAddrInfoW;
 begin
   // Lowest amount of hints possible...
   ZeroMemory(@Hints, sizeof(Hints));
-  // Since there is no IPv6 support downstream, force IPv4
-  Hints.ai_family := AF_INET;
-  Hints.ai_socktype := SOCK_STREAM;
-  Hints.ai_protocol := IPPROTO_ICMP;
+  Hints.ai_family := AF_UNSPEC;
+  Hints.ai_socktype := 0;
+  Hints.ai_protocol := IPPROTO_IP;
+  Hints.ai_flags := 0;
 
   if (GetAddrInfoW(PChar(Hostname), nil, @Hints, addrinfo) <> 0) then
   begin
@@ -56,14 +51,14 @@ begin
     AF_INET:
       begin
         Result.Format := IPv4;
-        Result.HumanReadable := GetHumanAddress(sockaddr(addrinfo.ai_addr^), addrinfo.ai_addrlen);
-        Result.addr4 := addrinfo.ai_addr^;
+        Result.HumanReadable := GetHumanAddress(PSockAddr(addrinfo.ai_addr), addrinfo.ai_addrlen);
+        Result.addr4 := PSockAddrIn(addrinfo.ai_addr)^;
       end;
     AF_INET6:
       begin
         Result.Format := IPv6;
-        Result.HumanReadable := GetHumanAddress(sockaddr(addrinfo.ai_addr^), addrinfo.ai_addrlen);
-        Result.addr4 := addrinfo.ai_addr^;
+        Result.HumanReadable := GetHumanAddress(PSockAddr(addrinfo.ai_addr), addrinfo.ai_addrlen);
+        Result.addr6 := PSockAddrIn6(addrinfo.ai_addr)^;
       end;
   end;
 
