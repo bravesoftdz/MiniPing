@@ -80,6 +80,45 @@ function IcmpSendEcho(icmpHandle: THandle; DestinationAddress: in_addr; RequestD
 
 {$ENDREGION}
 
+{$REGION 'ICMP6 related constants, functions and types'}
+
+const
+  ICMP_ECHO = 8;
+  ICMP_ECHOREPLY = 0;
+  ICMP_UNREACH = 3;
+  ICMP_TIME_EXCEEDED = 11;
+  // rfc-2292
+  ICMP6_ECHO = 128;
+  ICMP6_ECHOREPLY = 129;
+  ICMP6_UNREACH = 1;
+  ICMP6_TIME_EXCEEDED = 3;
+
+  AI_CANONNAME = 2;
+  AI_NUMERICHOST = 4;
+
+type
+  TIP_OPTION_INFORMATION = record
+    Ttl: Byte;
+    Tos: Byte;
+    Flags: Byte;
+    OptionsSize: Byte;
+    OptionsData: PAnsiChar;
+  end;
+
+  PIP_OPTION_INFORMATION = ^TIP_OPTION_INFORMATION;
+
+  TICMPV6_ECHO_REPLY = record
+    Address: TSockAddrIn6;
+    Status: Integer;
+    RoundTripTime: Integer;
+  end;
+
+  PICMPV6_ECHO_REPLY = ^TICMPV6_ECHO_REPLY;
+
+function Icmp6CreateFile: Integer; stdcall; external 'iphlpapi.dll';
+function Icmp6SendEcho2(handle: Integer; Event: Pointer; ApcRoutine: Pointer; ApcContext: Pointer; SourceAddress: PSockAddrIn6; DestinationAddress: PSockAddrIn6; RequestData: Pointer; RequestSize: Integer; RequestOptions: PIP_OPTION_INFORMATION; ReplyBuffer: Pointer; ReplySize: Integer; Timeout: Integer): Integer; stdcall; external 'iphlpapi.dll';
+
+{$ENDREGION}
 
 function GetHumanAddress(addr: PSockAddr; const addrlen: NativeUInt): String;
 

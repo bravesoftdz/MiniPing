@@ -153,6 +153,7 @@ var
   NumResponses: DWORD;
 
 begin
+  Result := 3;
   SendData := 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
   ICMPFile := IcmpCreateFile;
@@ -184,17 +185,80 @@ begin
   end;
 end;
 
+/// <summary>
+/// Performs a ICMP6 Echo Request
+/// </summary>
+function PingV6(ip: sockaddr_in6; const HumanReadable: String; out ResultLine: String): Integer;
+var
+  ICMPFile: THandle;
+  SourceAddress: sockaddr_in6;
+  SendData: array [0 .. 31] of AnsiChar;
+  ReplyBuffer: PICMPV6_ECHO_REPLY;
+  ReplySize: DWORD;
+  NumResponses: DWORD;
+begin
+  Result := 3;
+  SendData := 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  ip.sin6_scope_id := 0;
+
+  ICMPFile := Icmp6CreateFile;
+  if ICMPFile <> INVALID_HANDLE_VALUE then
+    try
+      // Source Address
+      FillChar(SourceAddress, sizeof(SourceAddress), 0);
+
+      // Reply
+      ReplySize := 4000; // sizeof(ICMP_ECHO_REPLY) + sizeof(SendData);
+      GetMem(ReplyBuffer, ReplySize);
+      try
+
+        // handle: Integer; Event: Pointer; ApcRoutine: Pointer; ApcContext: Pointer; SourceAddress: PSockAddrIn6; DestinationAddress: PSockAddrIn6; RequestData: Pointer; RequestSize: Integer; RequestOptions: PIP_OPTION_INFORMATION; ReplyBuffer: Pointer; ReplySize: Integer; Timeout: Integer): Integer; stdcall; external 'iphlpapi.dll';
+        NumResponses := Icmp6SendEcho2(ICMPFile, nil, nil, nil, @SourceAddress, @ip, @SendData, sizeof(SendData), nil, ReplyBuffer, ReplySize, 1000);
+
+        if (NumResponses > 0) then
+        begin
+          if (ReplyBuffer.Status = 0) then
+          begin
+            ResultLine := 'Received Response from ' + HumanReadable + ' in ' + IntToStr(ReplyBuffer.RoundTripTime) + ' ms';
+            Result := 0;
+          end
+          else
+          begin
+            ResultLine := 'An Error occured: ' + IntToStr(ReplyBuffer.Status);
+            Result := 1;
+          end;
+        end
+        else
+        begin
+          ResultLine := 'Error: ' + ErrorToText(GetLastError());
+          Result := 1;
+        end;
+      finally
+        FreeMem(ReplyBuffer);
+      end;
+    finally
+      IcmpCloseHandle(ICMPFile);
+    end
+  else
+  begin
+    RaiseLastOSError();
+  end;
+end;
+
 function Ping(const Host: string; out ResultLine: String): Integer;
 var
   Lookup: TLookupResult;
 begin
-  Result := 3;
-
   Lookup := LookupIP(Host);
 
   if Lookup.Format = IPv4 then
   begin
     Result := PingV4(Lookup.addr4.sin_addr, Lookup.HumanReadable, ResultLine);
+  end
+  else
+  begin
+    Result := PingV6(Lookup.addr6, Lookup.HumanReadable, ResultLine);
   end;
 end;
 
