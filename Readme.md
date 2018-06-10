@@ -40,7 +40,7 @@ I didn't use them, because their use case was much too heavy for the application
 
 ## TODOs
 
-* IPv6 support
+Maybe: Adding a customizable timeout
 
 ## Contributing
 
